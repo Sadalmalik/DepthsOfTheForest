@@ -1,4 +1,5 @@
-﻿using TMPro;
+﻿using System;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -13,7 +14,9 @@ namespace Sadalmalik.Forest
         public float castRadius;
         public float castDistance;
 
-        public TMP_Text info;
+        public InteractionTool tool;
+
+        public ReactiveProperty<GameObject> AimObject;
 
         private InputAction _primaryAction;
         private InputAction _secondaryAction;
@@ -26,23 +29,22 @@ namespace Sadalmalik.Forest
 
             _primaryAction   = playerInput.actions["primary"];
             _secondaryAction = playerInput.actions["secondary"];
-            
+
             _primaryAction.performed   += HandlePrimary;
             _secondaryAction.performed += HandleSecondary;
         }
 
         private void Update()
         {
-            if (info == null)
-                return;
-            
             if (Cast(out RaycastHit hit))
             {
-                info.SetText(hit.collider.gameObject.name);
+                AimObject.Set(hit.collider.gameObject);
+
+                tool.Aim(hit);
             }
             else
             {
-                info.SetText("");
+                AimObject.Set(null);
             }
         }
 
@@ -51,6 +53,8 @@ namespace Sadalmalik.Forest
             if (Cast(out RaycastHit hit))
             {
                 Debug.Log($"Primary: {hit.collider.gameObject.name}");
+
+                tool.Primary(hit);
             }
         }
 
@@ -59,6 +63,8 @@ namespace Sadalmalik.Forest
             if (Cast(out RaycastHit hit))
             {
                 Debug.Log($"Secondary: {hit.collider.gameObject.name}");
+
+                tool.Secondary(hit);
             }
         }
 
