@@ -10,10 +10,14 @@ namespace Sadalmalik.Forest
         public TMP_Text info;
 
         public InteractionController InteractionController;
-
-        // Start is called before the first frame update
-        private void Awake()
+        
+        public void SetPlayerInteraction(InteractionController controller)
         {
+            if (InteractionController != null)
+                InteractionController.AimObject.OnChanged -= HandleAimChanged;
+
+            InteractionController = controller;
+
             InteractionController.AimObject.OnChanged += HandleAimChanged;
         }
 

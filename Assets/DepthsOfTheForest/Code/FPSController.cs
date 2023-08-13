@@ -1,5 +1,5 @@
 using System.Collections;
-using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -7,17 +7,27 @@ using UnityEngine.Serialization;
 
 namespace Sadalmalik.Forest
 {
-    [RequireComponent(typeof(CharacterController))]
-    public class FPSController : MonoBehaviour
+    public struct FPSControllerData : INetworkSerializable
     {
-        public PlayerInput playerInput;
+        public Vector3 position;
+        public Vector2 rotation;
 
+        public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+        {
+            serializer.SerializeValue(ref position);
+            serializer.SerializeValue(ref rotation);
+        }
+    }
+
+    [RequireComponent(typeof(CharacterController))]
+    public class FPSController : NetworkBehaviour
+    {
+        public PlayerInput         playerInput;
         public CharacterController character;
+        public Camera              eye;
+        public GameObject          bodyView;
 
-        public Camera eye;
-
-        public bool StartControlOnAwake;
-
+        [Space] //
         public float mouseSensitive;
         public float walkSpeed;
         public float runSpeed;
@@ -25,7 +35,7 @@ namespace Sadalmalik.Forest
         public float coyoteTime;
 
         private Vector2 _rotation;
-        private float   _verticalVelocity;
+        private Vector3 _velocity;
         private float   _coyoteEnd;
         private bool    _jump;
 
@@ -34,43 +44,73 @@ namespace Sadalmalik.Forest
         private InputAction _dashAction;
         private InputAction _jumpAction;
 
+        private readonly NetworkVariable<FPSControllerData> _netData =
+            new(writePerm: NetworkVariableWritePermission.Owner);
+
         private void Awake()
         {
-            character = GetComponent<CharacterController>();
-
             _lookAction = playerInput.actions["look"];
             _moveAction = playerInput.actions["move"];
             _dashAction = playerInput.actions["dash"];
             _jumpAction = playerInput.actions["jump"];
-
-            if (StartControlOnAwake)
-                StartControl();
-            else
-                EndControl();
         }
+
 
         public void StartControl()
         {
             eye.gameObject.SetActive(true);
 
-            Cursor.lockState = CursorLockMode.Locked;
+            CursorUtils.BeginState(CursorLockMode.Locked);
         }
 
         public void EndControl()
         {
             eye.gameObject.SetActive(false);
 
-            Cursor.lockState = CursorLockMode.None;
+            CursorUtils.EndState();
+        }
+        
+        public override void OnNetworkSpawn()
+        {
+            GameManager.Instance.AddPlayer(this);
+            bodyView.SetActive(!IsOwner);
+            eye.gameObject.SetActive(IsOwner);
+            if (IsOwner)
+                StartControl();
+        }
+
+        [ServerRpc]
+        public void CallServer()
+        {
+            
         }
 
         private void Update()
         {
-            UpdateLook();
-            UpdateMove();
-            UpdateJump();
+            if (IsOwner)
+            {
+                UpdateLookInput();
+                UpdateMoveInput();
+                UpdateJumpInput();
+
+                ApplyLook();
+                ApplyMove();
+
+                _netData.Value = new FPSControllerData
+                {
+                    position = transform.position,
+                    rotation = _rotation
+                };
+            }
+            else
+            {
+                transform.position = _netData.Value.position;
+                _rotation          = _netData.Value.rotation;
+                ApplyLook();
+            }
         }
 
-        private void UpdateLook()
+        private void UpdateLookInput()
         {
             var look = _lookAction.ReadValue<Vector2>();
 
@@ -78,30 +118,29 @@ namespace Sadalmalik.Forest
 
             _rotation.x += look.x;
             _rotation.y =  Mathf.Clamp(_rotation.y - look.y, -90, 90);
-
-            transform.localRotation     = Quaternion.Euler(0, _rotation.x, 0);
-            eye.transform.localRotation = Quaternion.Euler(_rotation.y, 0, 0);
         }
 
-        private void UpdateMove()
+        private void UpdateMoveInput()
         {
             var move = _moveAction.ReadValue<Vector2>();
 
             var offset = character.transform.forward * move.y + character.transform.right * move.x;
             var speed  = _dashAction.phase == InputActionPhase.Performed ? runSpeed : walkSpeed;
-            character.Move(offset * speed * Time.deltaTime);
+
+            offset      *= speed;
+            _velocity.x =  offset.x;
+            _velocity.z =  offset.z;
         }
 
-        private void UpdateJump()
+        private void UpdateJumpInput()
         {
-            _verticalVelocity += Physics.gravity.y * Time.deltaTime;
-            character.Move(Vector3.up * _verticalVelocity * Time.deltaTime);
+            _velocity.y += Physics.gravity.y * Time.deltaTime;
 
             if (character.isGrounded)
             {
                 _jump = false;
 
-                _verticalVelocity = 0;
+                _velocity.y = 0;
 
                 _coyoteEnd = Time.time + coyoteTime;
             }
@@ -114,8 +153,19 @@ namespace Sadalmalik.Forest
             {
                 _jump = true;
 
-                _verticalVelocity = Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight);
+                _velocity.y = Mathf.Sqrt(-2f * Physics.gravity.y * jumpHeight);
             }
+        }
+
+        private void ApplyLook()
+        {
+            transform.localRotation     = Quaternion.Euler(0, _rotation.x, 0);
+            eye.transform.localRotation = Quaternion.Euler(_rotation.y, 0, 0);
+        }
+
+        private void ApplyMove()
+        {
+            character.Move(_velocity * Time.deltaTime);
         }
     }
 }
