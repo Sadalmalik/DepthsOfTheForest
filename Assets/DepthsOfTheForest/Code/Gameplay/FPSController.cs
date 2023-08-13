@@ -79,12 +79,6 @@ namespace Sadalmalik.Forest
                 StartControl();
         }
 
-        [ServerRpc]
-        public void CallServer()
-        {
-            
-        }
-
         private void Update()
         {
             if (IsOwner)

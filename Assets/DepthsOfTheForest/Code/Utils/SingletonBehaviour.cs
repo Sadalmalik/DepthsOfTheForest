@@ -17,6 +17,8 @@ namespace Sadalmalik.Forest
             }
         }
 
+        public bool dontDestroyOnLoad = false;
+
         public void Awake()
         {
             if (_instance != null && _instance != this)
@@ -28,6 +30,9 @@ namespace Sadalmalik.Forest
             _instance = this as T;
 
             _instance.name = $"[singleton] {this.name}";
+
+            if (dontDestroyOnLoad)
+                DontDestroyOnLoad(gameObject);
 
             Init();
         }

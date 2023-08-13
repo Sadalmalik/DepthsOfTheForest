@@ -2,12 +2,12 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Sadalmalik.Forest
 {
     public class GameManager : SingletonBehaviour<GameManager>
     {
-        public PlayerHUD playerHUD;
         [SerializeField] //
         private List<FPSController> _players;
 
@@ -21,9 +21,12 @@ namespace Sadalmalik.Forest
         public void AddPlayer(FPSController controller)
         {
             _players.Add(controller);
-            
+
             if (controller.IsOwner)
-                playerHUD.SetPlayerInteraction(controller.GetComponent<InteractionController>());
+            {
+                var playerHUDScreen = UIManager.Get<PlayerHUDScreen>();
+                playerHUDScreen.SetPlayerInteraction(controller.GetComponent<InteractionController>());
+            }
         }
     }
 }
